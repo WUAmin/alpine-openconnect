@@ -24,7 +24,7 @@ else
     -A INPUT -p udp -m udp --dport 445 -j DROP
     -A INPUT -p tcp -m tcp --dport 445 -j DROP
     COMMIT
-    " | sed -e 's/^\s\+//g' > tee  /config/ocserv/rules.v4
+    " | sed -e 's/^\s\+//g' > /config/ocserv/rules.v4
 fi
 iptables-restore < /config/ocserv/rules.v4
 
@@ -70,7 +70,7 @@ else
     ping-leases = false
     cisco-client-compat = true
     dtls-legacy = true
-    " | sed -e 's/^\s\+//g' > tee /config/ocserv/ocserv.conf
+    " | sed -e 's/^\s\+//g' > /config/ocserv/ocserv.conf
 fi
 
 touch /config/ocserv/ocpasswd
