@@ -1,8 +1,10 @@
 alpine-openconnect-1:
   image: alpine-openconnect
   container_name: alpine-openconnect-1
+  privileged: true
   ports:
     - "443:443"
+    - "443:443/udp"
   volumes:
     - ~/alpine-openconnect-1_config/:/config/ocserv
     - ~/ssl/:/config/ssl
