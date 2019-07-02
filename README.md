@@ -1,5 +1,5 @@
 # alpine-openconnect
-openconnect server (ocserv) for Docker
+openconnect server (ocserv) for Docker (VPN/Proxy)
 
 
 ## Build a docker image
