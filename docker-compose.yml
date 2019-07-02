@@ -1,0 +1,22 @@
+alpine-openconnect-1:
+  image: alpine-openconnect
+  container_name: alpine-openconnect-1
+  ports:
+    - "443:443"
+  volumes:
+    - ~/alpine-openconnect-1_config/:/config/ocserv
+    - ~/ssl/:/config/ssl
+  environment:
+    - LISTEN_PORT=443
+    - DNS_SERVERS1=8.8.8.8
+    - DNS_SERVERS2=1.1.1.1
+    - SERVER_CERT_NAME=cert1.pem
+    - SERVER_KEY_NAME=privkey1.pem
+    - SERVER_CA_NAME=fullchain1.pem
+    - MAX_CLIENTS=16
+    - MAX_SAME_CLIENTS=1
+    - DEVICE_NAME=vpns
+    - DEFAULT_DOMAIN=example.com
+    - IPV4_NET=192.168.10.0
+    - IPV4_MASK=255.255.255.0
+  restart: always
