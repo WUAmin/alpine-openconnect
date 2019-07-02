@@ -1,7 +1,9 @@
 # Use an official alpine
 FROM alpine:latest
 
-ENV LISTEN_PORT       2443
+MAINTAINER WUAmin <wuamin@gmail.com>
+
+ENV LISTEN_PORT       443
 ENV DNS_SERVERS1      8.8.8.8
 ENV DNS_SERVERS2      1.1.1.1
 ENV SERVER_CERT_NAME  cert1.pem
@@ -14,17 +16,35 @@ ENV DEFAULT_DOMAIN    example.com
 ENV IPV4_NET          192.168.11.0
 ENV IPV4_MASK         255.255.255.0
 
+RUN mkdir -pv /config/ssl && mkdir -p /config/ocserv
 
+VOLUME /config/ssl
+VOLUME /config/ocserv
 
-# Install iptables & restore rules
-RUN apk --update add --no-cache iptables
-
-# Set DNSs
-RUN echo "nameserver ${DNS_SERVERS1} \n\
-  nameserver ${DNS_SERVERS2}" | tee /etc/resolv.conf
-
-# Install build dependencies packages
-RUN apk add --no-cache --virtual .build-deps \
+RUN cd && \
+  # Update system
+  apk --update upgrade --no-cache && \
+  # Install iptables
+  apk --update add --no-cache iptables && \
+  # Set DNSs
+  echo -e "# Generated from Dockerfile\n\
+  nameserver ${DNS_SERVERS1}\n\
+  nameserver ${DNS_SERVERS2}\n" | sed -e 's/^\s\+//g' | tee /etc/resolv.conf && \
+  # Install build dependencies packages
+  apk add --no-cache --virtual .build-deps \
+  curl \
+  g++ \
+  gpgme \
+  linux-headers \
+  linux-pam-dev \
+  tar \
+  xz \
+  gettext \
+  automake \
+  asciidoc \
+  xmlto \
+  autoconf \
+  build-base \
   pkgconf \
   gawk \
   make \
@@ -42,102 +62,76 @@ RUN apk add --no-cache --virtual .build-deps \
   gnutls \
   git \
   libev-dev \
-  lz4-dev
-
-# Build ocserv
-RUN wget ftp://ftp.infradead.org/pub/ocserv/ocserv-0.12.3.tar.xz
-RUN tar xf ocserv-0.12.3.tar.xz
-RUN cd ocserv-0.12.3 && \
-  ./configure --prefix=/usr/local --sysconfdir=/etc && \
-  make && \
-  make install && \
-  cd .. && \
-  rm -rf ocserv-0.12.3
-
-# Remove build dependencies packages
-RUN cd;apk del .build-deps
-
-# Install Libs
-RUN apk --update add --no-cache \
+  lz4-dev && \
+  # Download and Build ocserv
+  # cd /tmp && wget "https://github.com$(curl https://github.com/openconnect/ocserv/releases | grep 'ocserv.*.tar.gz' | sed -e 's/^.*\href=\"\([^\"]*\)\".*/\1/g' | head -n 1)" -O ocserv.tar.gz && \
+  cd /tmp && wget "ftp://ftp.infradead.org/pub/ocserv/ocserv-$(curl https://ocserv.gitlab.io/www/download.html | grep -i latest | grep -e '[0-9]\+\.[0-9]\+\.[0-9]\+' | sed -e 's/.*\([0-9]\+\.[0-9]\+\.[0-9]\+\).*/\1/g').tar.xz" -O ocserv.tar.xz && \
+  mkdir -pv /tmp/ocserv && tar xvf ocserv.tar.xz -C /tmp/ocserv --strip-components=1 && rm -rfv ocserv.tar.xz && cd ocserv/ && \
+  # chmod +x ./autogen.sh && ./autogen.sh && ./configure --prefix=/usr/local --sysconfdir=/config/ocserv && \
+  ./configure --prefix=/usr/local --sysconfdir=/config/ocserv && make && make install && cd .. && rm -rfv ocserv && cd && \
+  # Remove build dependencies packages
+  apk del .build-deps && \
+  # Install Libs
+  apk --update add --no-cache \
   lz4-libs \
   gnutls \
   libev \
   protobuf-c \
-  libseccomp
+  libseccomp \
+  linux-pam && \
+  # Tuning system
+  echo -e "\n\
+  fs.file-max = 100000\n\
+  net.ipv4.ip_forward=1\n\
+  net.core.somaxconn = 10240\n\
+  # Protect from IP Spoofing  \n\
+  net.ipv4.conf.all.rp_filter = 1\n\
+  net.ipv4.conf.default.rp_filter = 1\n\
+  \n\
+  # Ignore ICMP broadcast requests\n\
+  net.ipv4.icmp_echo_ignore_broadcasts = 1\n\
+  \n\
+  # Protect from bad icmp error messages\n\
+  net.ipv4.icmp_ignore_bogus_error_responses = 1\n\
+  \n\
+  # Disable source packet routing\n\
+  net.ipv4.conf.all.accept_source_route = 0\n\
+  net.ipv6.conf.all.accept_source_route = 0\n\
+  net.ipv4.conf.default.accept_source_route = 0\n\
+  net.ipv6.conf.default.accept_source_route = 0\n\
+  \n\
+  # Turn on exec shield\n\
+  kernel.exec-shield = 1\n\
+  kernel.randomize_va_space = 1\n\
+  \n\
+  # Block SYN attacks\n\
+  net.ipv4.tcp_syncookies = 1\n\
+  net.ipv4.tcp_max_syn_backlog = 2048\n\
+  net.ipv4.tcp_synack_retries = 2\n\
+  net.ipv4.tcp_syn_retries = 5\n\
+  \n\
+  # Log Martians  \n\
+  net.ipv4.conf.all.log_martians = 1\n\
+  net.ipv4.icmp_ignore_bogus_error_responses = 1\n\
+  \n\
+  # Ignore send redirects\n\
+  net.ipv4.conf.all.send_redirects = 0\n\
+  net.ipv4.conf.default.send_redirects = 0\n\
+  \n\
+  # Ignore ICMP redirects\n\
+  net.ipv4.conf.all.accept_redirects = 0\n\
+  net.ipv6.conf.all.accept_redirects = 0\n\
+  net.ipv4.conf.default.accept_redirects = 0\n\
+  net.ipv6.conf.default.accept_redirects = 0\n\
+  net.ipv4.conf.all.secure_redirects = 0\n\
+  net.ipv4.conf.default.secure_redirects = 0\n" | sed -e 's/^\s\+//g' | tee -a /etc/sysctl.conf && \
+  sysctl -p && \
+  # Iptables
+  mkdir -pv /etc/iptables
 
-# Generate start.sh script
-RUN mkdir -p /app && \
-  echo -e '#!/bin/bash \n\
-  \n\
-  echo "*nat \n\
-  :PREROUTING ACCEPT [0:0] \n\
-  :INPUT ACCEPT [0:0] \n\
-  :OUTPUT ACCEPT [0:0] \n\
-  :POSTROUTING ACCEPT [0:0] \n\
-  -A POSTROUTING -j MASQUERADE \n\
-  COMMIT \n\
-  *filter \n\
-  :INPUT ACCEPT [0:0] \n\
-  :FORWARD ACCEPT [0:0] \n\
-  :OUTPUT ACCEPT [0:0] \n\
-  COMMIT \n\
-  " | tee /etc/iptables/rules.v4 \n\
-  iptables-restore < /etc/iptables/rules.v4 \n\
-  \n\
-  echo "auth = \"plain[/config/ocpasswd]\" \n\
-  tcp-port = ${LISTEN_PORT} \n\
-  udp-port = ${LISTEN_PORT} \n\
-  run-as-user = nobody \n\
-  run-as-group = daemon \n\
-  socket-file = /var/run/ocserv-socket \n\
-  server-cert = /config/certs/${SERVER_CERT_NAME} \n\
-  server-key = /config/certs/${SERVER_KEY_NAME} \n\
-  ca-cert = /config/certs/${SERVER_CA_NAME} \n\
-  isolate-workers = true \n\
-  max-clients = ${MAX_CLIENTS} \n\
-  max-same-clients = ${MAX_SAME_CLIENTS} \n\
-  keepalive = 32400 \n\
-  dpd = 90 \n\
-  compression = true \n\
-  mobile-dpd = 1800 \n\
-  cert-user-oid = 0.9.2342.19200300.100.1.1 \n\
-  tls-priorities = \"NORMAL:%SERVER_PRECEDENCE:%COMPAT:-VERS-SSL3.0\" \n\
-  auth-timeout = 240 \n\
-  min-reauth-time = 3 \n\
-  max-ban-score = 50 \n\
-  ban-reset-time = 300 \n\
-  cookie-timeout = 300 \n\
-  deny-roaming = false \n\
-  rekey-time = 172800 \n\
-  rekey-method = ssl \n\
-  use-utmp = true \n\
-  use-occtl = true \n\
-  pid-file = /var/run/ocserv.pid \n\
-  device = ${DEVICE_NAME} \n\
-  predictable-ips = true \n\
-  default-domain = ${DEFAULT_DOMAIN} \n\
-  ipv4-network = ${IPV4_NET} \n\
-  ipv4-netmask = ${IPV4_MASK} \n\
-  dns = ${DNS_SERVERS1} \n\
-  dns = ${DNS_SERVERS2} \n\
-  ping-leases = false \n\
-  cisco-client-compat = true \n\
-  dtls-legacy = true \n\" | tee /config/ocserv.conf \n\
-  \n\
-  touch /config/ocpasswd \n\
-  \n\
-  echo " \n\
-  fs.file-max = 100000 \n\
-  net.ipv4.ip_forward=1 \n\
-  net.core.somaxconn = 10240" | tee -a /etc/sysctl.conf \n\
-  sysctl -p \n\
-  echo \n\
-  echo \n\
-  echo "Running OpenConnect Server..." \n\
-  ocserv -c /config/ocserv.conf -f \n\
-  ' | tee /app/start.sh && \
-  chmod +x /app/start.sh
 
+COPY start.sh /config/start.sh
+RUN chmod +x /config/start.sh
 
 # Run ocserv
-CMD ["/bin/sh", "/app/start.sh"]
+CMD /config/start.sh
