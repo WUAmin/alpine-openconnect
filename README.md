@@ -13,6 +13,8 @@ docker build --tag=alpine-openconnect .
 
 
 ## Run docker container
+Container should run as `privileged`.
+
 You have to specify two paths, `ocserv config` and `ssl folder` as mounting volumes.
 
 
@@ -25,7 +27,7 @@ Files | Description | Replace `*
 **`ocpasswd`** | Contain user credentials | `NO`
 **`rules.v4`** | iptables rules | `NO`
 
-`*` Replace means if files exist, they won't be replaced. So you can put your config or firewall rules there.
+`*` **Replace** _means if files exist, they won't be replaced. So you can put your config or firewall rules there._ **But**, _keep in mind, if you want to re-run your container with another configuration, _**delete**_ the old one._
 
 
 
@@ -49,6 +51,7 @@ docker run -d --privileged \
   -e SERVER_CA_NAME=fullchain1.pem \
   -e IPV4_NET=192.168.11.0 \
   -p 2443:2443 \
+  -p 2443:2443/udp \
   --name alpine-openconnect-1 \
   --hostname alpine-openconnect-1 \
   --restart always \
@@ -65,8 +68,10 @@ This is a simple example of a `docker-compose.yml` file.
 alpine-openconnect-1:
   image: alpine-openconnect
   container_name: alpine-openconnect-1
+  privileged: true
   ports:
     - "443:443"
+    - "443:443/udp"
   volumes:
     - ~/alpine-openconnect-1_config/:/config/ocserv
     - ~/ssl/:/config/ssl
